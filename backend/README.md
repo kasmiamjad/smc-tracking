@@ -69,6 +69,19 @@ Rules:
 - Pings are kept only if recorded while checked in. Buffered pings uploaded after check-out still count toward the shift they were recorded in. `userId` in the body is ignored.
 - Latest positions live in `technician_positions` (one row per technician) and are broadcast on `private-fleet` as `position.updated`.
 
+## Endpoints (Sprint 3: MOD-12, MOD-13, MOD-19, MOD-20)
+
+Admin + dispatcher: `GET admin/fleet/trail/{assignmentId}?limit` (breadcrumbs of one shift, thinned to `limit`, newest point always kept), `GET reports/timesheet?period=daily|weekly|monthly|custom&startDate&endDate&departmentId&userId`, `GET reports/timesheet/export?…&exportType=csv|xlsx|pdf`.
+
+`admin/fleet/live` also returns `realtime`: the WebSocket settings the console uses when `BROADCAST_CONNECTION=reverb` (public key only), or `{"enabled": false}`, in which case the console polls every 5 seconds.
+
+Timesheet rules:
+- Shifts count toward the date they **started** (Riyadh time), so overnight shifts don't split.
+- In-progress shifts count time worked so far and are flagged `inProgress`.
+- Daily reports add `movingHours`, `stationaryHours` and `gpsCoverage` from the pings: speed above 1 m/s counts as moving, and gaps over 60 seconds count as missing tracking. Low coverage means someone checked in without tracking (spec 4.6 "ghost attendance").
+- Exports: CSV is a single table (day = shifts, week = day grid, month/custom = per technician). Excel adds a "Shifts" sheet. The PDF is a branded A4 landscape printout with a department breakdown and sign-off lines. `COMPANY_NAME` sets the header.
+- Arabic names print correctly in the PDF (shaped with ar-php; dompdf can't shape Arabic itself).
+
 ## Fake GPS (local only)
 
 ```bash

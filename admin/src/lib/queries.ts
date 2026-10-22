@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { Department, DocType, FleetMember, Paginated, Role, Shift, ShiftAssignment, User, UserDocument, UserStatus } from './types'
+import type { Department, DocType, Paginated, Role, Shift, ShiftAssignment, User, UserDocument, UserStatus } from './types'
 
 export interface UserFilters {
   search?: string
@@ -181,15 +181,95 @@ export const useAssignShift = () => useShiftMutation((body: AssignInput) => api.
 
 export const useRemoveAssignment = () => useShiftMutation((id: string) => api.delete(`/shift-assignments/${id}`))
 
-export const useFleet = () =>
+export interface TrailPoint {
+  lat: number
+  lng: number
+  speed: number | null
+  recordedAt: string
+}
+
+/** Breadcrumbs of one shift, for the map drawer. */
+export const useTrail = (assignmentId: string | null) =>
   useQuery({
-    queryKey: ['fleet'],
-    queryFn: () =>
-      api.get<{ data: FleetMember[]; meta: { onShift: number; live: number; lagging: number; offline: number; generatedAt: string } }>('/admin/fleet/live'),
-    // Polling until the WebSocket server is deployed (Sprint 3).
-    refetchInterval: 5_000,
-    staleTime: 0,
+    queryKey: ['trail', assignmentId],
+    queryFn: () => api.get<{ data: TrailPoint[]; meta: { totalPings: number } }>(`/admin/fleet/trail/${assignmentId}`),
+    enabled: !!assignmentId,
+    refetchInterval: 15_000,
   })
+
+// ---- timesheets -----------------------------------------------------------
+
+export type Period = 'daily' | 'weekly' | 'monthly' | 'custom'
+
+export interface TimesheetFilters {
+  period: Period
+  startDate: string
+  endDate?: string
+  departmentId?: string
+  userId?: string
+}
+
+export interface TimesheetPerson {
+  user: { id: string; fullName: string; phone: string | null; department: { id: string; name: string; colorHex: string } | null }
+  shifts: number
+  daysWorked: number
+  absences: number
+  inProgress: boolean
+  workedHours: number
+  regularHours: number
+  overtimeHours: number
+  averageDailyHours: number
+  byDate: Record<string, number>
+}
+
+export interface TimesheetEntry {
+  id: string
+  date: string
+  user: TimesheetPerson['user']
+  shiftName: string
+  status: 'ACTIVE' | 'COMPLETED' | 'ABSENT'
+  inProgress: boolean
+  scheduledStartAt: string
+  scheduledEndAt: string
+  checkedInAt: string | null
+  checkIn: { lat: number; lng: number } | null
+  checkInOutsideZone: boolean
+  checkedOutAt: string | null
+  checkOut: { lat: number; lng: number } | null
+  autoCheckedOut: boolean
+  workedHours: number
+  regularHours: number
+  overtimeHours: number
+  movingHours: number | null
+  stationaryHours: number | null
+  gpsCoverage: number | null
+}
+
+export interface Timesheet {
+  period: Period
+  startDate: string
+  endDate: string
+  dates: string[]
+  timezone: string
+  generatedAt: string
+  totals: { technicians: number; shifts: number; absences: number; workedHours: number; regularHours: number; overtimeHours: number }
+  people: TimesheetPerson[]
+  entries: TimesheetEntry[]
+}
+
+export const useTimesheet = (filters: TimesheetFilters) =>
+  useQuery({
+    queryKey: ['timesheet', filters],
+    queryFn: () => api.get<{ data: Timesheet }>('/reports/timesheet' + qs(filters)),
+    select: (res) => res.data,
+    placeholderData: (prev) => prev,
+    // Keeps in-progress shifts ticking.
+    refetchInterval: 60_000,
+  })
+
+export function timesheetExportPath(filters: TimesheetFilters, type: 'csv' | 'xlsx' | 'pdf'): string {
+  return '/reports/timesheet/export' + qs({ ...filters, exportType: type })
+}
 
 function useDepartmentMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
   const qc = useQueryClient()

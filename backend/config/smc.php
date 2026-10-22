@@ -2,6 +2,9 @@
 
 return [
 
+    // Shown on exported reports.
+    'company_name' => env('COMPANY_NAME', env('APP_NAME', 'SMC Field Ops')),
+
     'auth' => [
         'access_token_ttl_minutes' => (int) env('AUTH_ACCESS_TOKEN_TTL_MINUTES', 1440),
         'refresh_token_ttl_days' => (int) env('AUTH_REFRESH_TOKEN_TTL_DAYS', 30),

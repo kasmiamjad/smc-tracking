@@ -1,11 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, hasTokens, publicRequest, saveTokens, SESSION_EXPIRED_EVENT } from './api'
+import { api, ApiError, hasTokens, publicRequest, saveTokens, SESSION_EXPIRED_EVENT } from './api'
 import type { TokenPair, User } from './types'
 
 interface AuthValue {
   user: User | null
   loading: boolean
+  /** Tokens exist but the server couldn't be reached to confirm them. */
+  restoreFailed: boolean
+  retry: () => void
   isAdmin: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
@@ -24,15 +27,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear()
   }, [queryClient])
 
-  // Restore the session on load.
+  // Restore the session on load. Only a rejected token signs out; a network
+  // blip, a slow server or a deploy in progress just retries.
+  const [restoreFailed, setRestoreFailed] = useState(false)
+  const [run, setRun] = useState(0) // bump to re-check the session
+  const retriesLeft = useRef(3)
+
   useEffect(() => {
     if (!hasTokens()) return
+    let cancelled = false
     api
       .get<{ data: User }>('/auth/me')
-      .then((res) => setUser(res.data))
-      .catch(clear)
-      .finally(() => setLoading(false))
-  }, [clear])
+      .then((res) => {
+        if (cancelled) return
+        setUser(res.data)
+        setLoading(false)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          clear()
+          setLoading(false)
+        } else if (retriesLeft.current-- > 0) {
+          setTimeout(() => setRun((r) => r + 1), 1500)
+        } else {
+          setRestoreFailed(true)
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [clear, run])
+
+  const retry = useCallback(() => {
+    retriesLeft.current = 3
+    setRestoreFailed(false)
+    setLoading(true)
+    setRun((r) => r + 1)
+  }, [])
 
   useEffect(() => {
     window.addEventListener(SESSION_EXPIRED_EVENT, clear)
@@ -54,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clear])
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin: user?.role === 'ADMIN', login, logout }}>
+    <AuthContext.Provider value={{ user, loading, restoreFailed, retry, isAdmin: user?.role === 'ADMIN', login, logout }}>
       {children}
     </AuthContext.Provider>
   )

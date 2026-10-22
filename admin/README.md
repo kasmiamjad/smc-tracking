@@ -34,5 +34,9 @@ The build output **is committed**, because the server has no Node.js. Rebuild an
 | Dashboard "On shift now": live list from GPS pings (every 5 s) | ✓ | ✓ |
 | Shifts: templates (times, days, active) | ✓ | view only |
 | Roster: weekly grid, assign by technician or department, remove | ✓ | view only |
+| Live map: team-colored pins, live/lagging/offline status, filters, search, details drawer with trail | ✓ | ✓ |
+| Timesheets: day / week / month / custom, moving vs stationary time, CSV / Excel / PDF export | ✓ | ✓ |
 
 Access tokens refresh automatically. If the refresh token is no longer valid, the user is sent back to sign-in.
+
+The live map uses WebSockets (Reverb) when the server has them and falls back to polling every 5 seconds. Map tiles default to OpenStreetMap. For heavy use, set `VITE_MAP_TILE_URL` (and `VITE_MAP_TILE_ATTRIBUTION`) to a commercial tile provider before building.

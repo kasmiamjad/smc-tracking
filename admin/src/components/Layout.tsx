@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { Building2, CalendarDays, Clock, LayoutDashboard, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
+import { Building2, CalendarDays, Clock, LayoutDashboard, Map as MapIcon, Sheet, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../lib/auth'
 import { usePendingUsers } from '../lib/queries'
 import { Avatar, RoleBadge } from './ui'
@@ -11,9 +11,11 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 
   const items = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    { to: '/map', label: 'Live map', icon: MapIcon },
     { to: '/approvals', label: 'Approvals', icon: UserCheck, count: pending },
     { to: '/roster', label: 'Roster', icon: CalendarDays },
     { to: '/shifts', label: 'Shifts', icon: Clock },
+    { to: '/timesheets', label: 'Timesheets', icon: Sheet },
     { to: '/users', label: 'Users', icon: Users },
     { to: '/departments', label: 'Departments', icon: Building2 },
   ]
@@ -74,9 +76,11 @@ function UserFooter() {
 
 export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  // The live map uses the whole screen.
+  const fullBleed = useLocation().pathname === '/map'
 
   return (
-    <div className="flex min-h-full">
+    <div className={clsx('flex', fullBleed ? 'h-dvh' : 'min-h-full')}>
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white py-5 lg:flex">
         <Brand />
@@ -112,7 +116,7 @@ export function Layout() {
           </button>
           <span className="text-sm font-semibold">SMC Field Ops</span>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className={fullBleed ? 'min-h-0 flex-1' : 'mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8'}>
           <Outlet />
         </main>
       </div>

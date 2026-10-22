@@ -75,32 +75,42 @@ function send(method: string, path: string, token: string | undefined, body?: Bo
   })
 }
 
-let refreshing: Promise<boolean> | null = null
+type RefreshResult = 'refreshed' | 'rejected' | 'unavailable'
+
+let refreshing: Promise<RefreshResult> | null = null
 
 /** Exchange the refresh token once, even if many requests hit 401 together. */
-function refreshTokens(): Promise<boolean> {
-  refreshing ??= (async () => {
+function refreshTokens(): Promise<RefreshResult> {
+  refreshing ??= (async (): Promise<RefreshResult> => {
     const tokens = readTokens()
-    if (!tokens) return false
-    const res = await send('POST', '/auth/refresh', tokens.refreshToken)
-    if (!res.ok) return false
+    if (!tokens) return 'rejected'
+    let res: Response
+    try {
+      res = await send('POST', '/auth/refresh', tokens.refreshToken)
+    } catch {
+      return 'unavailable' // network down: keep the session, try again later
+    }
+    if (res.status === 401 || res.status === 403) return 'rejected'
+    if (!res.ok) return 'unavailable' // 5xx / deploy in progress
     const data = (await res.json()) as TokenPair
     saveTokens({ token: data.token, tokenExpiresAt: data.tokenExpiresAt, refreshToken: data.refreshToken, refreshTokenExpiresAt: data.refreshTokenExpiresAt })
-    return true
+    return 'refreshed'
   })().finally(() => {
     refreshing = null
   })
   return refreshing
 }
 
+/** Signs out only when the server says the session is over, never on an outage. */
 async function authorizedFetch(method: string, path: string, body?: Body): Promise<Response> {
   let res = await send(method, path, readTokens()?.token, body)
 
   if (res.status === 401 && readTokens()) {
-    if (await refreshTokens()) {
+    const result = await refreshTokens()
+    if (result === 'refreshed') {
       res = await send(method, path, readTokens()?.token, body)
     }
-    if (res.status === 401) {
+    if (result === 'rejected' || (result === 'refreshed' && res.status === 401)) {
       saveTokens(null)
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
     }
@@ -129,6 +139,19 @@ export async function fetchBlobUrl(absoluteUrl: string): Promise<string> {
   const res = await authorizedFetch('GET', path)
   if (!res.ok) throw await toApiError(res)
   return URL.createObjectURL(await res.blob())
+}
+
+/** Download an authenticated file (exports) and hand it to the browser as a save. */
+export async function downloadFile(path: string): Promise<void> {
+  const res = await authorizedFetch('GET', path)
+  if (!res.ok) throw await toApiError(res)
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'download'
+  const url = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
 export const api = {

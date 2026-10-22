@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { BatteryCharging, BatteryLow, BatteryMedium, Gauge, Radio } from 'lucide-react'
 import { Link } from 'react-router'
 import { formatAge } from '../lib/format'
-import { useFleet } from '../lib/queries'
+import { useLiveFleet } from '../lib/fleet'
 import type { FleetMember, Freshness } from '../lib/types'
 import { Avatar, Card, Spinner } from './ui'
 
@@ -26,9 +26,9 @@ function Battery({ member }: { member: FleetMember }) {
 }
 
 export function OnShiftPanel() {
-  const fleet = useFleet()
-  const meta = fleet.data?.meta
-  const members = [...(fleet.data?.data ?? [])].sort((a, b) => (a.ageSeconds ?? 1e9) - (b.ageSeconds ?? 1e9))
+  const fleet = useLiveFleet()
+  const meta = fleet.counts
+  const members = [...fleet.members].sort((a, b) => (a.ageSeconds ?? 1e9) - (b.ageSeconds ?? 1e9))
 
   return (
     <Card className="flex flex-col">
@@ -84,7 +84,7 @@ export function OnShiftPanel() {
           ))}
         </ul>
       )}
-      <p className="mt-auto border-t border-slate-100 px-5 py-2 text-xs text-slate-400">Refreshes every 5 seconds · map view comes next</p>
+      <p className="mt-auto border-t border-slate-100 px-5 py-2 text-xs text-slate-400">{fleet.status === 'live' ? 'Live updates' : 'Refreshes every 5 seconds'} · <Link to="/map" className="text-brand-600 hover:text-brand-700">Open live map</Link></p>
     </Card>
   )
 }

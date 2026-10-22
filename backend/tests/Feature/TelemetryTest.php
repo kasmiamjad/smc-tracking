@@ -142,6 +142,37 @@ class TelemetryTest extends TestCase
         $this->assertSame('OFFLINE', collect($this->getJson('/api/v1/admin/fleet/live')->json('data'))->firstWhere('userId', $this->tech->id)['freshness']);
     }
 
+    public function test_trail_returns_the_shift_path_thinned_to_the_limit(): void
+    {
+        $this->travel(2)->minutes();
+        $this->postJson('/api/v1/telemetry/ping', ['pings' => array_map(
+            fn ($i) => $this->ping(sprintf('2026-10-19T05:00:%02d.000Z', $i * 2), lat: 24.70 + $i / 1000),
+            range(0, 29),
+        )])->assertJson(['accepted' => 30]);
+
+        $this->actingAsUser(User::factory()->dispatcher()->create());
+
+        $all = $this->getJson("/api/v1/admin/fleet/trail/{$this->assignment->id}")->assertOk();
+        $all->assertJsonPath('meta.totalPings', 30)->assertJsonCount(30, 'data');
+        $this->assertSame(24.70, $all->json('data.0.lat'));
+
+        $thin = $this->getJson("/api/v1/admin/fleet/trail/{$this->assignment->id}?limit=10")->json();
+        $this->assertLessThanOrEqual(11, count($thin['data']));
+        $this->assertSame(24.729, end($thin['data'])['lat'], 'the latest point is always kept');
+    }
+
+    public function test_fleet_snapshot_tells_the_console_how_to_get_live_updates(): void
+    {
+        $this->actingAsUser(User::factory()->dispatcher()->create());
+
+        config(['broadcasting.default' => 'log']);
+        $this->getJson('/api/v1/admin/fleet/live')->assertJsonPath('realtime', ['enabled' => false]);
+
+        config(['broadcasting.default' => 'reverb', 'broadcasting.connections.reverb.key' => 'pub-key', 'broadcasting.connections.reverb.secret' => 'never-shown']);
+        $res = $this->getJson('/api/v1/admin/fleet/live')->assertJsonPath('realtime.enabled', true)->assertJsonPath('realtime.key', 'pub-key');
+        $this->assertStringNotContainsString('never-shown', $res->getContent());
+    }
+
     public function test_technicians_cannot_see_the_fleet(): void
     {
         $this->getJson('/api/v1/admin/fleet/live')->assertForbidden();

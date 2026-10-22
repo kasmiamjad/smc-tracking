@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\TechnicianAuthController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\FleetController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftAssignmentController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\TelemetryController;
@@ -51,11 +52,14 @@ Route::prefix('v1')->group(function () {
             Route::get('users/pending', [UserController::class, 'pending']);
             Route::get('users/{user}', [UserController::class, 'show']);
             Route::get('fleet/live', [FleetController::class, 'live']);
+            Route::get('fleet/trail/{assignment}', [FleetController::class, 'trail']);
         });
 
         Route::middleware('role:ADMIN,DISPATCHER')->group(function () {
             Route::get('shifts', [ShiftController::class, 'index']);
             Route::get('shifts/roster', [ShiftAssignmentController::class, 'roster']);
+            Route::get('reports/timesheet', [ReportController::class, 'timesheet']);
+            Route::get('reports/timesheet/export', [ReportController::class, 'export']);
         });
 
         // ---- Console: admins only (write) ----------------------------------
