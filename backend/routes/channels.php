@@ -6,3 +6,8 @@ use Illuminate\Support\Facades\Broadcast;
 Broadcast::channel('users.{id}', function ($user, string $id) {
     return $user->id === $id && $user->canAuthenticate();
 });
+
+// Live fleet positions, for admins and dispatchers.
+Broadcast::channel('fleet', function ($user) {
+    return $user->role->usesConsole() && $user->canAuthenticate();
+});

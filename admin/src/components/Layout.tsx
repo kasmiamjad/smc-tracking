@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Building2, LayoutDashboard, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
+import { Building2, CalendarDays, Clock, LayoutDashboard, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../lib/auth'
@@ -12,6 +12,8 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const items = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/approvals', label: 'Approvals', icon: UserCheck, count: pending },
+    { to: '/roster', label: 'Roster', icon: CalendarDays },
+    { to: '/shifts', label: 'Shifts', icon: Clock },
     { to: '/users', label: 'Users', icon: Users },
     { to: '/departments', label: 'Departments', icon: Building2 },
   ]

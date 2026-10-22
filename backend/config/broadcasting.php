@@ -41,8 +41,11 @@ return [
                 'scheme' => env('REVERB_SCHEME', 'https'),
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
+            // Broadcasts are sent inline from the telemetry request, so a slow or
+            // down WebSocket server must fail fast instead of stalling every ping.
             'client_options' => [
-                // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
+                'connect_timeout' => (float) env('REVERB_CONNECT_TIMEOUT', 0.5),
+                'timeout' => (float) env('REVERB_TIMEOUT', 1.5),
             ],
         ],
 

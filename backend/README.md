@@ -51,3 +51,30 @@ Admin + dispatcher (read): `GET admin/users` (`status, role, departmentId, block
 Admin only: `POST admin/users`, `PATCH admin/users/{id}`, `PATCH admin/users/{id}/approval`, `PATCH admin/users/{id}/block`, `POST admin/users/{id}/reset-pin`, `POST admin/users/{id}/unlock`, `PATCH admin/documents/{id}/verification`, `POST|PUT|DELETE departments`.
 
 All paths are prefixed with `/api/v1/`.
+
+## Endpoints (Sprint 2: MOD-07 to MOD-11)
+
+Technicians: `GET shifts/my-shifts` (active plus the next 7 days), `POST shifts/check-in` `{assignmentId, location: {lat, lng}}`, `POST shifts/check-out` `{assignmentId, location?}`, `POST telemetry/ping` (the spec 4.2 payload, or `{"pings": [...]}` with up to 500 buffered pings).
+
+Admin + dispatcher (read): `GET shifts`, `GET shifts/roster?from&to&departmentId&userId&status` (default: the current week), `GET admin/fleet/live` (everyone checked in, with latest position and `freshness`: LIVE / LAGGING / OFFLINE).
+
+Admin only: `POST|PUT|DELETE shifts`, `POST shifts/assign` `{shiftId, userIds[] | departmentId, startDate, endDate}`, `DELETE shift-assignments/{id}` (only shifts that haven't started).
+
+Rules:
+- Shift times are wall-clock in `SHIFTS_TIMEZONE` (default `Asia/Riyadh`) and stored in UTC. An end time at or before the start time means the shift ends the next day.
+- Each assignment saves its own scheduled start and end, so editing a template never changes past timesheets.
+- Check-in opens 60 minutes before the start. Being outside the shift's zone is allowed but flagged (`checkInOutsideZone`).
+- **Overtime = worked time beyond the scheduled shift length.** Check-out records worked, regular and overtime minutes.
+- `app:close-overdue-shifts` (every 5 minutes) checks out shifts left open 4 hours past their end, at the scheduled end time, and marks never-started shifts ABSENT.
+- Pings are kept only if recorded while checked in. Buffered pings uploaded after check-out still count toward the shift they were recorded in. `userId` in the body is ignored.
+- Latest positions live in `technician_positions` (one row per technician) and are broadcast on `private-fleet` as `position.updated`.
+
+## Fake GPS (local only)
+
+```bash
+php artisan db:seed --class=DemoSeeder      # sample technicians, once
+php artisan serve                           # terminal 1
+php artisan app:simulate-fleet --minutes=10 --flaky   # terminal 2
+```
+
+This checks demo technicians in to a "Simulation" shift through the real API and sends a ping every 4 seconds as they drive around. `--flaky` drops some pings so pins show as lagging or offline. It refuses to run in production.

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { Department, DocType, Paginated, Role, User, UserDocument, UserStatus } from './types'
+import type { Department, DocType, FleetMember, Paginated, Role, Shift, ShiftAssignment, User, UserDocument, UserStatus } from './types'
 
 export interface UserFilters {
   search?: string
@@ -113,6 +113,83 @@ export const useVerifyDocument = () =>
   )
 
 export const useDeleteDocument = () => useUserMutation((id: string) => api.delete<void>(`/documents/${id}`))
+
+// ---- shifts, roster, fleet ------------------------------------------------
+
+export const useShifts = () =>
+  useQuery({
+    queryKey: ['shifts'],
+    queryFn: () => api.get<{ data: Shift[] }>('/shifts'),
+    select: (res) => res.data,
+  })
+
+export interface ShiftInput {
+  name: string
+  startTime: string
+  endTime: string
+  daysOfWeek: number[]
+  isActive: boolean
+}
+
+function useShiftMutation<TVars, TResult = unknown>(fn: (vars: TVars) => Promise<TResult>) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shifts'] })
+      qc.invalidateQueries({ queryKey: ['roster'] })
+    },
+  })
+}
+
+export const useSaveShift = () =>
+  useShiftMutation((v: Partial<ShiftInput> & { id?: string }) => {
+    const { id, ...body } = v
+    return id ? api.put(`/shifts/${id}`, { ...body }) : api.post('/shifts', { ...body })
+  })
+
+export const useDeleteShift = () => useShiftMutation((id: string) => api.delete(`/shifts/${id}`))
+
+export interface RosterFilters {
+  from: string
+  to: string
+  departmentId?: string
+}
+
+export const useRoster = (filters: RosterFilters) =>
+  useQuery({
+    queryKey: ['roster', filters],
+    queryFn: () => api.get<{ data: ShiftAssignment[]; meta: { from: string; to: string; timezone: string } }>('/shifts/roster' + qs(filters)),
+    placeholderData: (prev) => prev,
+  })
+
+export interface AssignInput {
+  shiftId: string
+  startDate: string
+  endDate: string
+  userIds?: string[]
+  departmentId?: string
+}
+
+export interface AssignResult {
+  created: number
+  technicians: number
+  skipped: { userId: string; date: string; reason: string }[]
+}
+
+export const useAssignShift = () => useShiftMutation((body: AssignInput) => api.post<AssignResult>('/shifts/assign', { ...body }))
+
+export const useRemoveAssignment = () => useShiftMutation((id: string) => api.delete(`/shift-assignments/${id}`))
+
+export const useFleet = () =>
+  useQuery({
+    queryKey: ['fleet'],
+    queryFn: () =>
+      api.get<{ data: FleetMember[]; meta: { onShift: number; live: number; lagging: number; offline: number; generatedAt: string } }>('/admin/fleet/live'),
+    // Polling until the WebSocket server is deployed (Sprint 3).
+    refetchInterval: 5_000,
+    staleTime: 0,
+  })
 
 function useDepartmentMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
   const qc = useQueryClient()

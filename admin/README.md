@@ -31,5 +31,8 @@ The build output **is committed**, because the server has no Node.js. Rebuild an
 | Users: search, filter, add technician / dispatcher / admin | ✓ | view only |
 | User profile: edit, block / unblock, reset PIN, unlock, documents | ✓ | view only |
 | Departments: name and map color | ✓ | view only |
+| Dashboard "On shift now": live list from GPS pings (every 5 s) | ✓ | ✓ |
+| Shifts: templates (times, days, active) | ✓ | view only |
+| Roster: weekly grid, assign by technician or department, remove | ✓ | view only |
 
 Access tokens refresh automatically. If the refresh token is no longer valid, the user is sent back to sign-in.

@@ -10,6 +10,24 @@ return [
         'login_attempt_window_minutes' => (int) env('AUTH_PIN_ATTEMPT_WINDOW_MINUTES', 15),
     ],
 
+    'shifts' => [
+        // Shift templates are wall-clock times in this zone; everything is stored in UTC.
+        'timezone' => env('SHIFTS_TIMEZONE', 'Asia/Riyadh'),
+        'early_check_in_minutes' => (int) env('SHIFTS_EARLY_CHECK_IN_MINUTES', 60),
+        // A forgotten check-out is closed automatically this long after the scheduled end.
+        'auto_check_out_after_minutes' => (int) env('SHIFTS_AUTO_CHECK_OUT_AFTER_MINUTES', 240),
+        'max_assignment_days' => 62,
+    ],
+
+    'telemetry' => [
+        'max_batch_size' => 500,
+        // Buffered offline pings older than this are dropped.
+        'max_ping_age_hours' => 24,
+        // Live-map freshness (spec 4.4): green within 10s, amber 10-30s, grey after.
+        'fresh_seconds' => 10,
+        'lagging_seconds' => 30,
+    ],
+
     'documents' => [
         'disk' => env('DOCUMENTS_DISK', 'local'),
         'max_size_kb' => 10240,

@@ -7,6 +7,8 @@ import { ApprovalsPage } from './pages/ApprovalsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DepartmentsPage } from './pages/DepartmentsPage'
 import { LoginPage } from './pages/LoginPage'
+import { RosterPage } from './pages/RosterPage'
+import { ShiftsPage } from './pages/ShiftsPage'
 import { UserDetailPage } from './pages/UserDetailPage'
 import { UsersPage } from './pages/UsersPage'
 
@@ -45,6 +47,8 @@ const router = createBrowserRouter(
                 { path: 'users', element: <UsersPage /> },
                 { path: 'users/:id', element: <UserDetailPage /> },
                 { path: 'departments', element: <DepartmentsPage /> },
+                { path: 'shifts', element: <ShiftsPage /> },
+                { path: 'roster', element: <RosterPage /> },
                 { path: '*', element: <Navigate to="/" replace /> },
               ],
             },

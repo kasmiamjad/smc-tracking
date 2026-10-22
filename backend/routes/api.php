@@ -1,11 +1,16 @@
 <?php
 
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\Auth\ConsoleAuthController;
 use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\Auth\TechnicianAuthController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\FleetController;
+use App\Http\Controllers\ShiftAssignmentController;
+use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\TelemetryController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -27,6 +32,14 @@ Route::prefix('v1')->group(function () {
         Route::post('auth/logout', [SessionController::class, 'logout'])->name('auth.logout');
         Route::post('auth/change-pin', [SessionController::class, 'changePin'])->name('auth.change-pin');
 
+        // ---- Technicians: shifts and telemetry --------------------------------
+        Route::middleware('role:TECHNICIAN')->group(function () {
+            Route::get('shifts/my-shifts', [AttendanceController::class, 'myShifts']);
+            Route::post('shifts/check-in', [AttendanceController::class, 'checkIn']);
+            Route::post('shifts/check-out', [AttendanceController::class, 'checkOut']);
+            Route::post('telemetry/ping', [TelemetryController::class, 'ping'])->middleware('throttle:telemetry');
+        });
+
         Route::get('users/{user}/documents', [DocumentController::class, 'index']);
         Route::post('users/{user}/documents', [DocumentController::class, 'store']);
         Route::get('documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
@@ -37,6 +50,12 @@ Route::prefix('v1')->group(function () {
             Route::get('users', [UserController::class, 'index']);
             Route::get('users/pending', [UserController::class, 'pending']);
             Route::get('users/{user}', [UserController::class, 'show']);
+            Route::get('fleet/live', [FleetController::class, 'live']);
+        });
+
+        Route::middleware('role:ADMIN,DISPATCHER')->group(function () {
+            Route::get('shifts', [ShiftController::class, 'index']);
+            Route::get('shifts/roster', [ShiftAssignmentController::class, 'roster']);
         });
 
         // ---- Console: admins only (write) ----------------------------------
@@ -50,6 +69,12 @@ Route::prefix('v1')->group(function () {
                 Route::post('users/{user}/unlock', [UserController::class, 'unlock']);
                 Route::patch('documents/{document}/verification', [DocumentController::class, 'verify']);
             });
+
+            Route::post('shifts', [ShiftController::class, 'store']);
+            Route::put('shifts/{shift}', [ShiftController::class, 'update']);
+            Route::delete('shifts/{shift}', [ShiftController::class, 'destroy']);
+            Route::post('shifts/assign', [ShiftAssignmentController::class, 'assign']);
+            Route::delete('shift-assignments/{assignment}', [ShiftAssignmentController::class, 'destroy']);
 
             Route::post('departments', [DepartmentController::class, 'store']);
             Route::put('departments/{department}', [DepartmentController::class, 'update']);

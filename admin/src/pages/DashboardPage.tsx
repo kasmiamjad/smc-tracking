@@ -1,6 +1,7 @@
-import { Ban, Building2, Map, UserCheck, Users } from 'lucide-react'
+import { Ban, Building2, UserCheck, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
+import { OnShiftPanel } from '../components/OnShiftPanel'
 import { Avatar, Card, DepartmentTag, PageHeader, Spinner } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { formatRelative } from '../lib/format'
@@ -38,8 +39,12 @@ export function DashboardPage() {
         <StatTile label="Departments" value={departments.data?.length} to="/departments" icon={<Building2 className="size-6 text-brand-700" />} accent="bg-brand-50" />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+      <div className="mt-6 grid gap-6 xl:grid-cols-5">
+        <div className="xl:col-span-3">
+          <OnShiftPanel />
+        </div>
+
+        <Card className="xl:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <h2 className="font-semibold text-slate-900">Approval queue</h2>
             <Link to="/approvals" className="text-sm font-medium text-brand-600 hover:text-brand-700">
@@ -69,16 +74,6 @@ export function DashboardPage() {
           ) : (
             <p className="px-5 py-10 text-center text-sm text-slate-500">No one is waiting for approval.</p>
           )}
-        </Card>
-
-        <Card className="flex flex-col items-center justify-center p-8 text-center lg:col-span-2">
-          <div className="rounded-full bg-brand-50 p-4 text-brand-600">
-            <Map className="size-8" />
-          </div>
-          <h2 className="mt-4 font-semibold text-slate-900">Live fleet map</h2>
-          <p className="mt-1 max-w-xs text-sm text-slate-500">
-            Real-time technician positions, team colors and siren alerts will appear here once shifts and GPS tracking are live.
-          </p>
         </Card>
       </div>
     </>
