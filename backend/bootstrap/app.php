@@ -27,6 +27,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ['prefix' => 'api/v1', 'middleware' => ['auth:sanctum', 'abilities:access']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // There is no server-rendered login page: API callers get a JSON 401
+        // (rendered below) and anything else is sent to the console's sign-in.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/admin/login');
+
         $middleware->alias([
             'abilities' => CheckAbilities::class,
             'active' => EnsureAccountActive::class,

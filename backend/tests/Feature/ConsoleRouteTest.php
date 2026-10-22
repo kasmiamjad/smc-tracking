@@ -26,4 +26,12 @@ class ConsoleRouteTest extends TestCase
     {
         $this->getJson('/api/v1/admin/users')->assertUnauthorized();
     }
+
+    public function test_unauthenticated_api_call_from_a_browser_gets_json_not_a_redirect(): void
+    {
+        // A browser hitting the API directly sends Accept: text/html.
+        $this->get('/api/v1/admin/users', ['Accept' => 'text/html'])
+            ->assertUnauthorized()
+            ->assertJsonPath('error', 'UNAUTHENTICATED');
+    }
 }
