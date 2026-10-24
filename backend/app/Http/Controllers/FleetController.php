@@ -35,6 +35,9 @@ class FleetController extends Controller
             'meta' => [
                 'generatedAt' => now()->toIso8601ZuluString(),
                 'timezone' => config('smc.shifts.timezone'),
+                // Seconds since the last ping at which a pin turns amber / grey, per rhythm.
+                'freshness' => config('smc.telemetry.freshness'),
+                'movingSpeed' => config('smc.telemetry.moving_speed'),
                 'onShift' => $rows->count(),
                 'live' => $rows->where('freshness', 'LIVE')->count(),
                 'lagging' => $rows->where('freshness', 'LAGGING')->count(),

@@ -142,6 +142,34 @@ class TelemetryTest extends TestCase
         $this->assertSame('OFFLINE', collect($this->getJson('/api/v1/admin/fleet/live')->json('data'))->firstWhere('userId', $this->tech->id)['freshness']);
     }
 
+    public function test_parked_technician_on_15s_rhythm_stays_live(): void
+    {
+        $this->postJson('/api/v1/telemetry/ping', $this->ping('2026-10-19T05:00:00Z', extra: ['speed' => 0.2]));
+        $this->actingAsUser(User::factory()->dispatcher()->create());
+        $freshness = fn () => collect($this->getJson('/api/v1/admin/fleet/live')->json('data'))->firstWhere('userId', $this->tech->id);
+
+        $this->travel(20)->seconds(); // would be amber for a moving phone
+        $this->assertSame(['stationary', 'LIVE'], [$freshness()['rhythm'], $freshness()['freshness']]);
+
+        $this->travel(20)->seconds(); // 40s: a 15s ping has clearly been missed
+        $this->assertSame('LAGGING', $freshness()['freshness']);
+
+        $this->travel(25)->seconds(); // 65s
+        $this->assertSame('OFFLINE', $freshness()['freshness']);
+
+        $this->getJson('/api/v1/admin/fleet/live')->assertJsonPath('meta.freshness.stationary', ['live' => 25, 'lagging' => 60]);
+    }
+
+    public function test_unknown_speed_is_judged_as_moving(): void
+    {
+        $this->postJson('/api/v1/telemetry/ping', $this->ping('2026-10-19T05:00:00Z', extra: ['speed' => null]));
+        $this->actingAsUser(User::factory()->dispatcher()->create());
+        $this->travel(20)->seconds();
+
+        $member = collect($this->getJson('/api/v1/admin/fleet/live')->json('data'))->firstWhere('userId', $this->tech->id);
+        $this->assertSame(['moving', 'LAGGING'], [$member['rhythm'], $member['freshness']]);
+    }
+
     public function test_trail_returns_the_shift_path_thinned_to_the_limit(): void
     {
         $this->travel(2)->minutes();

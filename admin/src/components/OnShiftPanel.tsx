@@ -6,7 +6,7 @@ import { useLiveFleet } from '../lib/fleet'
 import type { FleetMember, Freshness } from '../lib/types'
 import { Avatar, Card, Spinner } from './ui'
 
-// Spec 4.4: green = transmitting within 10s, amber = 10-30s, grey = offline.
+// Spec 4.4: green = pinging on rhythm, amber = a ping is late, grey = offline (see lib/fleet.ts freshnessOf).
 const DOT: Record<Freshness, string> = {
   LIVE: 'bg-emerald-500',
   LAGGING: 'bg-amber-400',

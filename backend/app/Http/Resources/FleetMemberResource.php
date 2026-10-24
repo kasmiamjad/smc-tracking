@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\ShiftAssignment;
+use App\Support\Freshness;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -43,13 +44,10 @@ class FleetMemberResource extends JsonResource
                 'recordedAt' => $position->recorded_at->toIso8601ZuluString('millisecond'),
             ] : null,
             'ageSeconds' => $age,
+            // Which ping rhythm the phone should be on, so the console can judge freshness the same way.
+            'rhythm' => Freshness::rhythm($position?->speed),
             // Spec 4.4 pulse colors: LIVE = green, LAGGING = amber, OFFLINE = grey.
-            'freshness' => match (true) {
-                $age === null => 'OFFLINE',
-                $age <= config('smc.telemetry.fresh_seconds') => 'LIVE',
-                $age <= config('smc.telemetry.lagging_seconds') => 'LAGGING',
-                default => 'OFFLINE',
-            },
+            'freshness' => Freshness::of($age, $position?->speed),
         ];
     }
 }

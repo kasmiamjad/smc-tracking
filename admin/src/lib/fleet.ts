@@ -3,9 +3,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import type { FleetMember, Freshness } from './types'
 
-// Spec 4.4: green within 10s, amber 10-30s, grey after.
-const FRESH_SECONDS = 10
-const LAGGING_SECONDS = 30
+interface Thresholds {
+  live: number
+  lagging: number
+}
+
+interface FreshnessRules {
+  moving: Thresholds
+  stationary: Thresholds
+  movingSpeed: number
+}
+
+// Used until the first snapshot arrives; the server's config is the source of truth.
+const DEFAULT_RULES: FreshnessRules = {
+  moving: { live: 10, lagging: 30 }, // spec 4.4, phone pings every 4s
+  stationary: { live: 25, lagging: 60 }, // phone backs off to every 15s
+  movingSpeed: 1,
+}
 
 interface RealtimeConfig {
   enabled: boolean
@@ -20,7 +34,16 @@ interface RealtimeConfig {
 
 interface FleetResponse {
   data: FleetMember[]
-  meta: { generatedAt: string; timezone: string; onShift: number; live: number; lagging: number; offline: number }
+  meta: {
+    generatedAt: string
+    timezone: string
+    freshness: { moving: Thresholds; stationary: Thresholds }
+    movingSpeed: number
+    onShift: number
+    live: number
+    lagging: number
+    offline: number
+  }
   realtime: RealtimeConfig
 }
 
@@ -39,10 +62,16 @@ interface PositionEvent {
 
 export type RealtimeStatus = 'connecting' | 'live' | 'polling'
 
-export function freshnessOf(ageSeconds: number | null): Freshness {
+/**
+ * Judge a pin against the rhythm its phone should be on: every 4s while
+ * moving, every 15s once stationary. Unknown speed counts as moving (stricter).
+ * Mirrors App\Support\Freshness on the server.
+ */
+export function freshnessOf(ageSeconds: number | null, speed: number | null | undefined, rules: FreshnessRules = DEFAULT_RULES): Freshness {
   if (ageSeconds === null) return 'OFFLINE'
-  if (ageSeconds <= FRESH_SECONDS) return 'LIVE'
-  if (ageSeconds <= LAGGING_SECONDS) return 'LAGGING'
+  const t = speed != null && speed <= rules.movingSpeed ? rules.stationary : rules.moving
+  if (ageSeconds <= t.live) return 'LIVE'
+  if (ageSeconds <= t.lagging) return 'LAGGING'
   return 'OFFLINE'
 }
 
@@ -166,15 +195,15 @@ export function useLiveFleet() {
     return () => clearInterval(t)
   }, [])
 
-  const members = useMemo(
-    () =>
-      (query.data?.data ?? []).map((m) => {
-        const skew = query.data?.skewMs ?? 0
-        const age = m.position ? Math.max(0, Math.round((now - skew - new Date(m.position.recordedAt).getTime()) / 1000)) : null
-        return { ...m, ageSeconds: age, freshness: freshnessOf(age) }
-      }),
-    [query.data, now],
-  )
+  const members = useMemo(() => {
+    const meta = query.data?.meta
+    const rules: FreshnessRules = meta?.freshness ? { ...meta.freshness, movingSpeed: meta.movingSpeed } : DEFAULT_RULES
+    return (query.data?.data ?? []).map((m) => {
+      const skew = query.data?.skewMs ?? 0
+      const age = m.position ? Math.max(0, Math.round((now - skew - new Date(m.position.recordedAt).getTime()) / 1000)) : null
+      return { ...m, ageSeconds: age, freshness: freshnessOf(age, m.position?.speed, rules) }
+    })
+  }, [query.data, now])
 
   const counts = useMemo(
     () => ({
