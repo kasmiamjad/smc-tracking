@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Building2, CalendarDays, Clock, LayoutDashboard, Map as MapIcon, Sheet, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
+import { Building2, CalendarDays, Clock, History, LayoutDashboard, Map as MapIcon, Sheet, LogOut, Menu, UserCheck, Users, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../lib/auth'
@@ -12,6 +12,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const items = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/map', label: 'Live map', icon: MapIcon },
+    { to: '/history', label: 'Route history', icon: History },
     { to: '/approvals', label: 'Approvals', icon: UserCheck, count: pending },
     { to: '/roster', label: 'Roster', icon: CalendarDays },
     { to: '/shifts', label: 'Shifts', icon: Clock },
@@ -76,8 +77,8 @@ function UserFooter() {
 
 export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  // The live map uses the whole screen.
-  const fullBleed = useLocation().pathname === '/map'
+  // The live map and route history use the whole screen.
+  const fullBleed = ['/map', '/history'].includes(useLocation().pathname)
 
   return (
     <div className={clsx('flex', fullBleed ? 'h-dvh' : 'min-h-full')}>

@@ -4,7 +4,7 @@ import L from 'leaflet'
 // Plugin attaches itself to the global L that Leaflet sets up.
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
-import { BatteryCharging, BatteryLow, BatteryMedium, Clock, Compass, Gauge, LocateFixed, Phone, Search, User as UserIcon, X } from 'lucide-react'
+import { BatteryCharging, BatteryLow, BatteryMedium, Clock, Compass, Gauge, History as HistoryIcon, LocateFixed, Phone, Search, User as UserIcon, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, Polyline, TileLayer, useMap } from 'react-leaflet'
 import { Link } from 'react-router'
@@ -287,16 +287,20 @@ function Drawer({ member, timezone, onClose }: { member: FleetMember; timezone?:
         </div>
       </dl>
 
-      <div className="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 p-3">
+      <div className="mt-auto grid grid-cols-3 gap-2 border-t border-slate-100 p-3">
         {member.phone ? (
-          <a href={`tel:${member.phone}`} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+          <a href={`tel:${member.phone}`} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-2 text-sm font-medium text-white hover:bg-emerald-700">
             <Phone className="size-4" />
             Call
           </a>
         ) : (
           <span />
         )}
-        <Link to={`/users/${member.userId}`} className="inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 ring-inset hover:bg-slate-50">
+        <Link to={`/history?userId=${member.userId}`} className="inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 ring-inset hover:bg-slate-50">
+          <HistoryIcon className="size-4" />
+          History
+        </Link>
+        <Link to={`/users/${member.userId}`} className="inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-300 ring-inset hover:bg-slate-50">
           <UserIcon className="size-4" />
           Profile
         </Link>

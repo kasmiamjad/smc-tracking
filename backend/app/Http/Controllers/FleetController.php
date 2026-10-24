@@ -3,13 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AssignmentStatus;
+use App\Exceptions\ApiException;
 use App\Http\Resources\FleetMemberResource;
 use App\Models\ShiftAssignment;
+use App\Models\User;
+use App\Services\Routes\RouteHistory;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * Snapshot of everyone on shift with their latest position. The live map
@@ -47,7 +50,8 @@ class FleetController extends Controller
     }
 
     /**
-     * The breadcrumb trail of one shift, oldest first, for the map drawer.
+     * The cleaned breadcrumb trail of one shift, oldest first, for the map
+     * drawer: inaccurate readings and spikes removed, stays collapsed to stops.
      * Long shifts are thinned to at most `limit` points, keeping the latest.
      */
     public function trail(Request $request, ShiftAssignment $assignment): JsonResponse
@@ -55,22 +59,61 @@ class FleetController extends Controller
         $request->validate(['limit' => ['nullable', 'integer', 'min:10', 'max:5000']]);
         $limit = (int) $request->input('limit', 1500);
 
-        $query = DB::table('location_logs')->where('shift_assignment_id', $assignment->id);
-        $total = (clone $query)->count();
+        $segment = RouteHistory::make()->segment($assignment);
+        $total = count($segment['points']);
         $step = max(1, (int) ceil($total / $limit));
 
-        $points = $query->orderBy('recorded_at')
-            ->get(['latitude', 'longitude', 'speed', 'recorded_at'])
-            ->filter(fn ($p, $i) => $i % $step === 0 || $i === $total - 1)
+        $points = collect($segment['points'])
+            ->filter(fn ($p, $i) => $i % $step === 0 || $i === $total - 1 || $p['stop'] !== null)
             ->map(fn ($p) => [
-                'lat' => (float) $p->latitude,
-                'lng' => (float) $p->longitude,
-                'speed' => $p->speed === null ? null : (float) $p->speed,
-                'recordedAt' => CarbonImmutable::parse($p->recorded_at)->toIso8601ZuluString(),
+                'lat' => $p['lat'],
+                'lng' => $p['lng'],
+                'speed' => $p['speed'],
+                'recordedAt' => CarbonImmutable::createFromTimestampMs($p['t'])->toIso8601ZuluString(),
             ])
             ->values();
 
-        return response()->json(['data' => $points, 'meta' => ['totalPings' => $total, 'returned' => $points->count()]]);
+        return response()->json([
+            'data' => $points,
+            'stops' => $segment['stops'],
+            'meta' => ['totalPings' => $segment['stats']['rawPoints'], 'returned' => $points->count(), 'source' => $segment['source']],
+        ]);
+    }
+
+    /**
+     * MOD-18: a technician's route over a time range (default: today in the
+     * business timezone), shift by shift, cleaned for drawing.
+     */
+    public function history(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'userId' => ['required', 'uuid', Rule::exists('users', 'id')],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after:from'],
+        ]);
+
+        $tz = config('smc.shifts.timezone');
+        $from = isset($data['from']) ? CarbonImmutable::parse($data['from'])->utc() : CarbonImmutable::now($tz)->startOfDay()->utc();
+        $to = isset($data['to']) ? CarbonImmutable::parse($data['to'])->utc() : $from->addDay();
+
+        if ($from->diffInHours($to) > config('smc.routes.max_history_hours')) {
+            throw new ApiException('RANGE_TOO_LONG', 'Route history covers at most '.config('smc.routes.max_history_hours').' hours at a time.', 422);
+        }
+
+        $user = User::with('department')->findOrFail($data['userId']);
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'fullName' => $user->full_name,
+                'phone' => $user->phone_number,
+                'department' => $user->department ? ['id' => $user->department->id, 'name' => $user->department->name, 'colorHex' => $user->department->color_hex] : null,
+            ],
+            'from' => $from->toIso8601ZuluString(),
+            'to' => $to->toIso8601ZuluString(),
+            'timezone' => $tz,
+            ...RouteHistory::make()->forUser($user->id, $from, $to),
+        ]);
     }
 
     /**

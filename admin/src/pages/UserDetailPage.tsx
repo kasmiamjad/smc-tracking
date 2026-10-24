@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, Check, KeyRound, LockOpen, Pencil, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, Ban, Check, History, KeyRound, LockOpen, Pencil, ShieldCheck, X } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { DocumentList } from '../components/DocumentList'
@@ -143,6 +143,15 @@ export function UserDetailPage() {
             </p>
           </div>
 
+          {isTech && user.status === 'ACTIVE' && (
+            <Link
+              to={`/history?userId=${user.id}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-300 ring-inset hover:bg-slate-50"
+            >
+              <History className="size-4" />
+              Route history
+            </Link>
+          )}
           {isAdmin && (
             <div className="flex flex-wrap gap-2">
               {user.status === 'PENDING_APPROVAL' && (

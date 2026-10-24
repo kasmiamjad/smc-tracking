@@ -197,6 +197,65 @@ export const useTrail = (assignmentId: string | null) =>
     refetchInterval: 15_000,
   })
 
+// ---- route history (MOD-18) -------------------------------------------------
+
+export interface RoutePoint {
+  lat: number
+  lng: number
+  t: number // unix ms
+  speed: number | null
+  stop: number | null // index into the segment's stops when this is a stop's arrival/departure
+}
+
+export interface RouteStop {
+  lat: number
+  lng: number
+  from: number
+  to: number
+  durationSeconds: number
+}
+
+export interface RouteStats {
+  rawPoints: number
+  droppedInaccurate: number
+  droppedSpikes: number
+  keptPoints: number
+  distanceMeters: number
+  stops: number
+  stoppedSeconds: number
+  movingSeconds: number
+}
+
+export interface RouteSegment {
+  assignmentId: string
+  shiftName: string | null
+  checkedInAt: string | null
+  checkedOutAt: string | null
+  inProgress: boolean
+  source: 'raw' | 'summary' | 'none'
+  points: RoutePoint[]
+  stops: RouteStop[]
+  stats: RouteStats
+}
+
+export interface RouteHistory {
+  user: { id: string; fullName: string; phone: string | null; department: { id: string; name: string; colorHex: string } | null }
+  from: string
+  to: string
+  timezone: string
+  segments: RouteSegment[]
+  totals: { distanceMeters: number; stops: number; stoppedSeconds: number; movingSeconds: number; rawPoints: number; droppedPoints: number }
+}
+
+export const useRouteHistory = (params: { userId: string; from: string; to: string } | null) =>
+  useQuery({
+    queryKey: ['route-history', params],
+    queryFn: () => api.get<RouteHistory>('/admin/route-history' + qs(params!)),
+    enabled: !!params,
+    // Today's route keeps growing while the shift runs.
+    refetchInterval: 60_000,
+  })
+
 // ---- timesheets -----------------------------------------------------------
 
 export type Period = 'daily' | 'weekly' | 'monthly' | 'custom'

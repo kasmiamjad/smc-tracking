@@ -37,6 +37,19 @@ return [
         'moving_speed' => 1.0,
     ],
 
+    'routes' => [
+        // Route drawing / history (RouteCleaner). Raw pings are never modified.
+        'max_accuracy' => 50,        // metres: readings the phone itself rates worse are not drawn
+        'max_speed' => 60,           // m/s: jumps implying more than ~216 km/h are spikes
+        'spike_min_jump' => 60,      // metres: an out-and-back spike leaves at least this far
+        'stop_radius' => 35,         // metres: staying within this ...
+        'stop_min_seconds' => 120,   // ... for this long is a stop
+        // Spec 6.3: raw pings are kept this long, then only a simplified route remains.
+        'raw_retention_days' => (int) env('ROUTES_RAW_RETENTION_DAYS', 30),
+        'summary_max_points' => 500,
+        'max_history_hours' => 24,
+    ],
+
     'documents' => [
         'disk' => env('DOCUMENTS_DISK', 'local'),
         'max_size_kb' => 10240,

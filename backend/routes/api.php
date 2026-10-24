@@ -53,6 +53,7 @@ Route::prefix('v1')->group(function () {
             Route::get('users/{user}', [UserController::class, 'show']);
             Route::get('fleet/live', [FleetController::class, 'live']);
             Route::get('fleet/trail/{assignment}', [FleetController::class, 'trail']);
+            Route::get('route-history', [FleetController::class, 'history']);
         });
 
         Route::middleware('role:ADMIN,DISPATCHER')->group(function () {

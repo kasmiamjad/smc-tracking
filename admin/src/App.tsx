@@ -17,6 +17,7 @@ import { UsersPage } from './pages/UsersPage'
 // Leaflet and the export UI load only when someone opens these pages.
 const MapPage = lazy(() => import('./pages/MapPage').then((m) => ({ default: m.MapPage })))
 const TimesheetsPage = lazy(() => import('./pages/TimesheetsPage').then((m) => ({ default: m.TimesheetsPage })))
+const RouteHistoryPage = lazy(() => import('./pages/RouteHistoryPage').then((m) => ({ default: m.RouteHistoryPage })))
 
 function RequireAuth() {
   const { user, loading, restoreFailed, retry } = useAuth()
@@ -71,6 +72,7 @@ const router = createBrowserRouter(
                 { path: 'roster', element: <RosterPage /> },
                 { path: 'map', element: <Suspense fallback={<LoadingBlock />}><MapPage /></Suspense> },
                 { path: 'timesheets', element: <Suspense fallback={<LoadingBlock />}><TimesheetsPage /></Suspense> },
+                { path: 'history', element: <Suspense fallback={<LoadingBlock />}><RouteHistoryPage /></Suspense> },
                 { path: '*', element: <Navigate to="/" replace /> },
               ],
             },

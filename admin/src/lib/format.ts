@@ -40,6 +40,39 @@ export function formatAge(seconds: number | null): string {
   return `${Math.floor(seconds / 3600)}h ago`
 }
 
+/** "1.2 km" / "350 m" */
+export function formatDistance(metres: number): string {
+  return metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${Math.round(metres)} m`
+}
+
+/** "2h 05m" / "14 min" / "45 s" */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)} s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`
+  return `${Math.floor(seconds / 3600)}h ${String(Math.round((seconds % 3600) / 60)).padStart(2, '0')}m`
+}
+
+/** Today's date (YYYY-MM-DD) in a given time zone. */
+export function todayIn(timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+}
+
+/**
+ * The UTC instant of wall-clock `date` + `time` in `timeZone`, as an ISO string.
+ * Works out the zone's offset at that moment, so it is right regardless of the
+ * viewer's own computer time zone (and across DST where a zone has it).
+ */
+export function zonedToUtcIso(date: string, time: string, timeZone: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const [hh, mm] = time.split(':').map(Number)
+  const guess = Date.UTC(y!, m! - 1, d!, hh!, mm!)
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })
+    .formatToParts(new Date(guess))
+    .reduce<Record<string, number>>((acc, p) => (p.type === 'literal' ? acc : { ...acc, [p.type]: Number(p.value) }), {})
+  const asSeenInZone = Date.UTC(parts.year!, parts.month! - 1, parts.day!, parts.hour!, parts.minute!)
+  return new Date(guess - (asSeenInZone - guess)).toISOString()
+}
+
 // ---- calendar dates (YYYY-MM-DD strings, no time zone) ----------------------
 
 export function toIsoDate(d: Date): string {
