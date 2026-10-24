@@ -1,9 +1,12 @@
 import 'leaflet/dist/leaflet.css'
 import clsx from 'clsx'
 import L from 'leaflet'
+// Plugin attaches itself to the global L that Leaflet sets up.
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { BatteryCharging, BatteryLow, BatteryMedium, Clock, Compass, Gauge, LocateFixed, Phone, Search, User as UserIcon, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, Polyline, TileLayer, useMap } from 'react-leaflet'
 import { Link } from 'react-router'
 import { Avatar, Input, Select, Spinner } from '../components/ui'
 import { useLiveFleet, type RealtimeStatus } from '../lib/fleet'
@@ -22,7 +25,16 @@ const STATUS_LABEL: Record<Freshness, string> = { LIVE: 'Live', LAGGING: 'Laggin
 
 type Member = FleetMember & { position: NonNullable<FleetMember['position']> }
 
-/** Spec 4.4 pin: team-colored ring, initials inside, status dot (pulsing while live). */
+/** Names are user-entered; never put them into marker HTML unescaped. */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+}
+
+/**
+ * Spec 4.4 pin: team-colored ring, initials inside, status dot (pulsing while
+ * live). The first name underneath shows when zoomed in to street level, so
+ * people with the same initials can be told apart.
+ */
 function pinIcon(m: FleetMember, selected: boolean): L.DivIcon {
   const team = m.department?.colorHex ?? NO_TEAM_COLOR
   const size = selected ? 46 : 38
@@ -31,11 +43,166 @@ function pinIcon(m: FleetMember, selected: boolean): L.DivIcon {
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     html: `
-      <div class="fleet-pin ${selected ? 'is-selected' : ''} ${m.freshness === 'OFFLINE' ? 'is-offline' : ''}" style="--team:${team};--status:${STATUS_COLOR[m.freshness]};width:${size}px;height:${size}px">
-        <span class="fleet-pin__face">${initials(m.fullName)}</span>
+      <div class="fleet-pin ${selected ? 'is-selected' : ''} ${m.freshness === 'OFFLINE' ? 'is-offline' : ''}" style="--team:${escapeHtml(team)};--status:${STATUS_COLOR[m.freshness]};width:${size}px;height:${size}px">
+        <span class="fleet-pin__face">${escapeHtml(initials(m.fullName))}</span>
         <span class="fleet-pin__dot ${m.freshness === 'LIVE' ? 'is-live' : ''}"></span>
+        <span class="fleet-pin__name">${escapeHtml(m.fullName.split(/\s+/)[0] ?? '')}</span>
       </div>`,
   })
+}
+
+type FleetMarker = L.Marker & { fleet?: FleetMember }
+
+/** Bubble for overlapping pins: count inside, ring shows the worst status in the group. */
+function clusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const members = (cluster.getAllChildMarkers() as FleetMarker[]).map((m) => m.fleet).filter((m): m is FleetMember => !!m)
+  const status: Freshness = members.some((m) => m.freshness === 'OFFLINE') ? 'OFFLINE' : members.some((m) => m.freshness === 'LAGGING') ? 'LAGGING' : 'LIVE'
+  const teams = new Set(members.map((m) => m.department?.colorHex ?? NO_TEAM_COLOR))
+  const team = teams.size === 1 ? [...teams][0]! : '#334155'
+  return L.divIcon({
+    className: '',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    html: `<div class="fleet-cluster" style="--team:${escapeHtml(team)};--status:${STATUS_COLOR[status]}" title="${members.length} technicians here">${cluster.getChildCount()}</div>`,
+  })
+}
+
+/**
+ * All technician pins in a cluster layer. Pins within ~36px merge into a
+ * numbered bubble; clicking it zooms in, and pins that still overlap at full
+ * zoom (same building) fan out so each one can be clicked.
+ */
+function FleetLayer({ members, selectedId, onSelect }: { members: Member[]; selectedId: string | null; onSelect: (id: string) => void }) {
+  const map = useMap()
+  const markers = useRef(new Map<string, FleetMarker>())
+  const lastSelected = useRef<string | null>(null)
+  const fanned = useRef(new Set<string>()) // ids in the currently fanned-out bubble
+  const held = useRef(new Map<string, L.LatLng>()) // positions waiting for the fan to close
+  const flushHeld = useRef(() => {})
+  const onSelectRef = useRef(onSelect)
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
+  const group = useMemo(
+    () =>
+      L.markerClusterGroup({
+        maxClusterRadius: 36,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: false, // handled in the clusterclick listener below
+        spiderfyOnMaxZoom: true,
+        spiderfyDistanceMultiplier: 1.8,
+        iconCreateFunction: clusterIcon,
+      }),
+    [],
+  )
+
+  useEffect(() => {
+    map.addLayer(group)
+    // People in the same building would need several zoom clicks before the
+    // pins separate; fan them out at once instead.
+    const onClusterClick = (e: L.LeafletEvent) => {
+      const cluster = (e as L.LeafletEvent & { layer: L.MarkerCluster }).layer
+      const bounds = cluster.getBounds()
+      if (map.getZoom() >= 17 || bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 30) cluster.spiderfy()
+      else cluster.zoomToBounds({ padding: [60, 60] })
+    }
+    // While a bubble is fanned out, position updates and bubble refreshes would
+    // snap it shut every few seconds, so remember who is in the open fan.
+    const onSpiderfied = (e: L.LeafletEvent) => {
+      fanned.current = new Set(((e as L.LeafletEvent & { markers: FleetMarker[] }).markers ?? []).map((m) => m.fleet?.userId ?? ''))
+    }
+    const onUnspiderfied = () => {
+      fanned.current = new Set()
+      flushHeld.current()
+    }
+    group.on('clusterclick', onClusterClick)
+    group.on('spiderfied', onSpiderfied)
+    group.on('unspiderfied', onUnspiderfied)
+    return () => {
+      group.off('clusterclick', onClusterClick)
+      group.off('spiderfied', onSpiderfied)
+      group.off('unspiderfied', onUnspiderfied)
+      map.removeLayer(group)
+    }
+  }, [map, group])
+
+  // First names appear under pins from street level (zoom 16+).
+  useEffect(() => {
+    const update = () => map.getContainer().classList.toggle('fleet-show-names', map.getZoom() >= 16)
+    update()
+    map.on('zoomend', update)
+    return () => {
+      map.off('zoomend', update)
+    }
+  }, [map])
+
+  // Keep markers in step with the fleet: move, restyle, add, remove.
+  // The fleet re-renders every second (ages tick), so only touch the DOM when
+  // something visible changed; replacing icons each second swallows clicks.
+  const looks = useRef(new Map<string, string>())
+  useEffect(() => {
+    const seen = new Set<string>()
+    let statusChanged = false
+    for (const m of members) {
+      seen.add(m.userId)
+      const at = L.latLng(m.position.latitude, m.position.longitude)
+      const look = [m.freshness, m.userId === selectedId, m.department?.colorHex, m.fullName].join('|')
+      let marker = markers.current.get(m.userId)
+      if (!marker) {
+        marker = L.marker(at, { icon: pinIcon(m, m.userId === selectedId), title: m.fullName, riseOnHover: true }) as FleetMarker
+        const id = m.userId
+        marker.on('click', () => onSelectRef.current(id))
+        markers.current.set(id, marker)
+        marker.fleet = m
+        group.addLayer(marker)
+        statusChanged = true
+      } else {
+        marker.fleet = m
+        if (fanned.current.has(m.userId)) held.current.set(m.userId, at)
+        else if (!marker.getLatLng().equals(at)) marker.setLatLng(at)
+        if (looks.current.get(m.userId) !== look) {
+          marker.setIcon(pinIcon(m, m.userId === selectedId))
+          statusChanged = true
+        }
+      }
+      looks.current.set(m.userId, look)
+      marker.setZIndexOffset(m.userId === selectedId ? 1000 : m.freshness === 'LIVE' ? 100 : 0)
+    }
+    for (const [id, marker] of markers.current) {
+      if (!seen.has(id)) {
+        group.removeLayer(marker)
+        markers.current.delete(id)
+        looks.current.delete(id)
+        statusChanged = true
+      }
+    }
+    if (statusChanged && !fanned.current.size) group.refreshClusters() // bubble ring shows the worst status inside
+  }, [members, selectedId, group])
+
+  // When the fan closes, apply the positions and bubble colours that were held back.
+  useEffect(() => {
+    flushHeld.current = () => {
+      for (const [id, at] of held.current) markers.current.get(id)?.setLatLng(at)
+      held.current.clear()
+      group.refreshClusters()
+    }
+  }, [group])
+
+  // Picking someone (pin or list) zooms in and fans out their bubble if needed.
+  useEffect(() => {
+    if (!selectedId) {
+      lastSelected.current = null
+      return
+    }
+    if (lastSelected.current === selectedId) return
+    const marker = markers.current.get(selectedId)
+    if (!marker) return
+    lastSelected.current = selectedId
+    group.zoomToShowLayer(marker, () => map.panTo(marker.getLatLng()))
+  }, [selectedId, members, group, map])
+
+  return null
 }
 
 /** Leaflet measures its container once; re-measure whenever the container resizes. */
@@ -60,20 +227,6 @@ function FitToFleet({ members }: { members: Member[] }) {
     if (members.length === 1) map.setView([members[0]!.position.latitude, members[0]!.position.longitude], 15)
     else map.fitBounds(L.latLngBounds(members.map((m) => [m.position.latitude, m.position.longitude])), { padding: [60, 60], maxZoom: 15 })
   }, [members, map])
-  return null
-}
-
-function FlyTo({ target }: { target: Member | null }) {
-  const map = useMap()
-  const last = useRef<string | null>(null)
-  useEffect(() => {
-    if (!target || last.current === target.userId) return
-    last.current = target.userId
-    map.flyTo([target.position.latitude, target.position.longitude], Math.max(map.getZoom(), 15), { duration: 0.8 })
-  }, [target, map])
-  useEffect(() => {
-    if (!target) last.current = null
-  }, [target])
   return null
 }
 
@@ -274,23 +427,13 @@ export function MapPage() {
           <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} maxZoom={19} />
           <TrackContainerSize />
           <FitToFleet members={onMap} />
-          <FlyTo target={selectedOnMap} />
           {selected && trail.data && trail.data.data.length > 1 && (
             <Polyline
               positions={trail.data.data.map((p) => [p.lat, p.lng] as [number, number])}
               pathOptions={{ color: selected.department?.colorHex ?? NO_TEAM_COLOR, weight: 4, opacity: 0.7 }}
             />
           )}
-          {onMap.map((m) => (
-            <Marker
-              key={m.userId}
-              position={[m.position.latitude, m.position.longitude]}
-              icon={pinIcon(m, m.userId === selectedId)}
-              zIndexOffset={m.userId === selectedId ? 1000 : m.freshness === 'LIVE' ? 100 : 0}
-              eventHandlers={{ click: () => setSelectedId(m.userId) }}
-              title={m.fullName}
-            />
-          ))}
+          <FleetLayer members={onMap} selectedId={selectedOnMap?.userId ?? null} onSelect={setSelectedId} />
         </MapContainer>
 
         <div className="pointer-events-none absolute top-3 left-3 z-[500]">
