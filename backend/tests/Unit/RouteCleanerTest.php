@@ -67,6 +67,55 @@ class RouteCleanerTest extends TestCase
         $this->assertLessThan(70, $r['stats']['distanceMeters'], 'the 300 m detour is not counted');
     }
 
+    public function test_indoor_flips_to_a_wifi_position_are_dropped(): void
+    {
+        // Standing still for 10 minutes; three times the phone flips ~100 m away for a few
+        // readings (all claiming 6-20 m accuracy) and back, like the field data.
+        $points = [];
+        $s = 0;
+        foreach ([[12, 0], [5, 100], [10, 0], [4, 85], [12, 0], [3, 130], [10, 0]] as [$readings, $away]) {
+            for ($k = 0; $k < $readings; $k++) {
+                $points[] = $this->p($away + ($k % 2) * 3, $away ? 20 : 0, $s, accuracy: $away ? 9 : 15, speed: 0);
+                $s += 5;
+            }
+        }
+
+        $r = (new RouteCleaner)->clean($points);
+
+        $this->assertSame(12, $r['stats']['droppedSpikes'], 'all 12 readings of the 3 excursions');
+        $this->assertCount(1, $r['stops'], 'one stay, no star of lines');
+        $this->assertLessThan(20, $r['stats']['distanceMeters']);
+    }
+
+    public function test_a_real_walk_out_and_back_is_kept(): void
+    {
+        $points = $this->walk(0, 80); // 112 m out at walking pace, a ping every 4 s
+        for ($s = 4; $s <= 80; $s += 4) {
+            $points[] = $this->p(112 - 1.4 * $s, 0, 80 + $s); // and back
+        }
+
+        $r = (new RouteCleaner)->clean($points);
+
+        $this->assertSame(0, $r['stats']['droppedSpikes']);
+        $this->assertEqualsWithDelta(224, $r['stats']['distanceMeters'], 5);
+    }
+
+    public function test_a_drive_away_that_does_not_come_back_is_kept(): void
+    {
+        $points = [];
+        for ($k = 0; $k < 10; $k++) {
+            $points[] = $this->p(0, 0, $k * 4, speed: 0);
+        }
+        for ($k = 1; $k <= 15; $k++) {
+            $points[] = $this->p(70 * $k, 0, 36 + $k * 4, speed: 17.5); // 63 km/h, 70 m per ping
+        }
+
+        $r = (new RouteCleaner)->clean($points);
+
+        $this->assertSame(0, $r['stats']['droppedSpikes']);
+        $this->assertEqualsWithDelta(1050, $r['stats']['distanceMeters'], 10);
+    }
+
     public function test_impossible_jump_is_dropped(): void
     {
         $points = $this->walk(0, 20);

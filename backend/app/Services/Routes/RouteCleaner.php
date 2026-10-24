@@ -55,6 +55,8 @@ class RouteCleaner
         }
 
         [$kept, $spikes] = $this->removeSpikes($accurate);
+        [$kept, $excursions] = $this->removeExcursions($kept);
+        $spikes += $excursions;
         [$points, $stops] = $this->collapseStops($kept);
 
         $distance = 0.0;
@@ -120,6 +122,57 @@ class RouteCleaner
         }
 
         return [$kept, $dropped];
+    }
+
+    /**
+     * Indoors, a phone can flip between a GPS fix and a Wi-Fi/cell estimate
+     * 50-150 m apart, both claiming good accuracy: one big jump away, a few
+     * minutes of readings drifting around over there, then one big jump
+     * straight back to where it was. Real movement never looks like that:
+     * walking starts and ends with small steps (~5 m per ping), and driving
+     * makes many big steps in a row. Drop such excursions.
+     *
+     * @return array{0: list<array>, 1: int}
+     */
+    private function removeExcursions(array $points): array
+    {
+        $n = count($points);
+        $drop = array_fill(0, $n, false);
+        $maxSeconds = 15 * 60;
+        $maxReach = 300;                 // metres: indoor flips stay local
+        $home = 1.5 * $this->stopRadius; // "back where it was"
+
+        for ($i = 1; $i < $n; $i++) {
+            $origin = $points[$i - 1];
+            if ($drop[$i - 1] || $this->metres($origin, $points[$i]) <= $this->spikeMinJump) {
+                continue;
+            }
+
+            // After the jump out, the first other big step must land back home.
+            for ($j = $i + 1; $j < $n && ($points[$j]['t'] - $points[$i]['t']) / 1000 <= $maxSeconds; $j++) {
+                if ($this->metres($points[$j], $origin) > $maxReach) {
+                    break; // went somewhere far: a real trip
+                }
+                if ($this->metres($points[$j - 1], $points[$j]) > $this->spikeMinJump) {
+                    if ($this->metres($points[$j], $origin) <= $home) {
+                        for ($k = $i; $k < $j; $k++) {
+                            $drop[$k] = true;
+                        }
+                        $i = $j;
+                    }
+                    break; // either the jump back (excursion) or another big step (travelling)
+                }
+            }
+        }
+
+        $kept = [];
+        foreach ($points as $k => $p) {
+            if (! $drop[$k]) {
+                $kept[] = $p;
+            }
+        }
+
+        return [$kept, $n - count($kept)];
     }
 
     /**

@@ -12,14 +12,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'SMC Field Ops',
   slug: 'smc-field-ops',
-  version: '0.1.0',
+  version: '0.1.1',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
   android: {
     // Permanent once published to Google Play; change it before the first store upload if needed.
     package: 'app.effedo.smcfieldops',
-    versionCode: 1,
+    versionCode: 2,
     adaptiveIcon: {
       backgroundColor: '#1D4ED8',
       foregroundImage: './assets/android-icon-foreground.png',

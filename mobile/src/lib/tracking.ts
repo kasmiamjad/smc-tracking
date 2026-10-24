@@ -66,32 +66,36 @@ function metresBetween(a: { latitude: number; longitude: number }, b: { latitude
 }
 
 /**
- * Speed in m/s. Uses the GPS-reported speed when there is one; some chips
- * (and the emulator) report 0 or nothing while moving, so fall back to
- * distance / time since the previous fix, ignoring jumps within the GPS error.
+ * Speed in m/s, or null when unknown.
+ *
+ * The phone's own reading (GPS Doppler) is trusted whenever it gives one,
+ * including 0: indoors a phone can flip 50-150 m between a GPS fix and a
+ * Wi-Fi estimate while standing still, and working speed out from those
+ * jumps produced fake "58 km/h" readings. Only when the phone reports no
+ * speed at all is it derived from distance / time since the previous fix.
  */
-async function measureSpeeds(locations: Location.LocationObject[]): Promise<number[]> {
+async function measureSpeeds(locations: Location.LocationObject[]): Promise<(number | null)[]> {
   const prevRaw = await getKv('lastFix')
   let prev = prevRaw ? (JSON.parse(prevRaw) as { latitude: number; longitude: number; t: number }) : null
   const speeds = locations.map((l) => {
-    const reported = l.coords.speed != null && l.coords.speed > 0.05 ? l.coords.speed : null
+    const reported = l.coords.speed != null && l.coords.speed >= 0 ? l.coords.speed : null
     let derived: number | null = null
-    if (prev) {
+    if (reported === null && prev) {
       const seconds = (l.timestamp - prev.t) / 1000
       const metres = metresBetween(prev, l.coords)
       if (seconds > 0 && metres > Math.max(10, l.coords.accuracy ?? 0)) derived = metres / seconds
     }
     prev = { latitude: l.coords.latitude, longitude: l.coords.longitude, t: l.timestamp }
-    return reported ?? derived ?? 0
+    return reported ?? derived
   })
   if (prev) await setKv('lastFix', JSON.stringify(prev))
   return speeds
 }
 
 /** Switch between the 4s and 15s cadence based on movement. */
-async function adaptInterval(speeds: number[]): Promise<void> {
+async function adaptInterval(speeds: (number | null)[]): Promise<void> {
   const now = Date.now()
-  const moving = speeds.some((s) => s > TRACKING.movingSpeed)
+  const moving = speeds.some((s) => s !== null && s > TRACKING.movingSpeed)
   if (moving) await setKv('lastMovingAt', String(now))
 
   const mode = ((await getKv('mode')) as Mode | null) ?? 'moving'
